@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWTError
+from database import SessionLocal, User
+from sqlalchemy.orm import Session
 
 load_dotenv()
 
@@ -40,3 +42,21 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+# Get database session
+def get_db():
+    db=SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_user(db: Session, username: str):
+    return db.query(User).filter(User.username == username).first()
+
+def create_user(db: Session, username : str, password: str):
+    hashed_pw=hash_password(password)
+    user= User(username=username, hashed_password=hashed_pw)
+    db.add(user)
+    db.commit()
+    db.refresh(User)
+    return user
