@@ -9,8 +9,8 @@ from fastapi.openapi.utils import get_openapi
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
-from auth import get_user,create_user, get_db, create_access_token, verify_password, hash_password
-
+from auth import get_user,create_user, get_db, create_access_token, verify_password, get_user_from_token
+from database import User
 from sqlalchemy.orm import Session
 
 app=FastAPI()
@@ -19,16 +19,7 @@ app=FastAPI()
 limiter=Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
-
 app.add_middleware(SlowAPIMiddleware)
-
-# # Dummy user database
-# fake_users_db = {
-#     "user@example.com": {
-#         "username": "user@example.com",
-#         "hashed_password": hash_password("securepassword"),
-#     }
-# }
 
 # OAuth2 Setup
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", scheme_name="JWT")
@@ -72,6 +63,19 @@ async def login(request:Request, body: LoginRequest, db: Session = Depends(get_d
     
     access_token=create_access_token({"sub": user.username})
     return {"access_token": access_token, "token-type":"Bearer"}
+
+# Restrict Admin Routes
+@app.get("/admin/users")
+async def get_all_users(db: Session = Depends(get_db), token: str = Depends(OAuth2PasswordBearer(tokenUrl="auth/login"))):
+    user=get_user_from_token(token,db)
+
+    if user.role!='admin':
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    users = db.query(User).all()
+    return [{"username": u.username, "role": u.role} for u in users]
+
+
 
 # protected route
 @app.get("/users/me")

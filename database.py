@@ -1,5 +1,5 @@
-import os
-from sqlalchemy import create_engine, Column, String
+import os, enum
+from sqlalchemy import create_engine, Column, String, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -26,11 +26,17 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Define Base for Models
 Base = declarative_base()
 
+class RoleEnum(str, enum.Enum):
+    admin="admin"
+    user="user"
+
+
 # Define User Model
 class User(Base):
     __tablename__ = "users"
     username = Column(String, primary_key=True, index=True)
     hashed_password = Column(String)
+    role = Column(Enum(RoleEnum),default="user")
 
 # Create Tables
 Base.metadata.create_all(bind=engine)
