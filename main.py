@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer
@@ -10,7 +11,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from auth import get_user,create_user, get_db, create_access_token, verify_password, get_user_from_token
-from database import User
+from database import Transaction, User
 from sqlalchemy.orm import Session
 
 app=FastAPI()
@@ -28,6 +29,15 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class TransactionCreate(BaseModel):
+    amount: float
+
+class TransactionResponse(BaseModel):
+    id: int
+    user_id: str
+    amount: float
+    timestamp: datetime
+
 @app.get("/")
 async def root():
     return {"message": "API is running!"}
@@ -41,18 +51,6 @@ async def register(request: LoginRequest, db: Session = Depends(get_db)):
     
     user = create_user(db, request.username, request.password)
     return {"message": "User created successfully", "user": user.username}
-
-# Login user
-# @app.post("/auth/login")
-# @limiter.limit("5/minute")  # Limit login attempts
-# async def login(request: LoginRequest, db:Sessio):  # Fix: Added `request: Request`
-#     # user = fake_users_db.get(body.username)
-#     user=get_user(db,request.username)
-#     if not user or not verify_password(request.password, user.hashed_password):
-#         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-#     access_token = create_access_token(data={"sub": body.username})
-#     return {"access_token": access_token, "token_type": "Bearer"}
 
 @app.post("/auth/login")
 @limiter.limit("5/minute") # Login atempts limiter
@@ -102,4 +100,39 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
+
 app.openapi = custom_openapi
+
+@app.post("/transactions", response_model=TransactionResponse)
+async def create_transaction(
+    transaction: TransactionCreate,
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme)
+):
+    user = get_user_from_token(token, db)
+
+    new_transaction = Transaction(
+        user_id=user.username, 
+        amount=transaction.amount, 
+        timestamp=datetime.now(timezone.utc)
+    )
+
+    db.add(new_transaction)
+    db.commit()
+    db.refresh(new_transaction)
+
+    return new_transaction
+
+@app.get("/transactions", response_model=list[TransactionResponse])
+async def get_transactions(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme)
+):
+    user = get_user_from_token(token, db)
+
+    transactions = db.query(Transaction).filter(Transaction.user_id == user.username).all()
+    
+    return transactions
+
+
+# app.include_router(app)

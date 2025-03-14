@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
 import os, enum
-from sqlalchemy import create_engine, Column, String, Enum
+from sqlalchemy import DateTime, Float, create_engine, Column, String, Enum, Integer, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -38,5 +39,20 @@ class User(Base):
     hashed_password = Column(String)
     role = Column(Enum(RoleEnum),default="user")
 
+    transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
+
+class Transaction(Base):
+    __tablename__="transactions"
+
+    id=Column(Integer, primary_key=True, index= True, autoincrement=True)
+    user_id= Column(String, ForeignKey("users.username"))
+    amount= Column(Float, nullable=False)
+    
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user= relationship("User", back_populates="transactions")
+
 # Create Tables
+Base.metadata.drop_all(bind=engine)
+
 Base.metadata.create_all(bind=engine)
